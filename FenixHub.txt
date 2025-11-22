@@ -1,0 +1,426 @@
+-- Carregar UI
+local redzlib = loadstring(game:HttpGet("https://raw.githubusercontent.com/tbao143/Library-ui/refs/heads/main/Redzhubui"))()
+local Window = redzlib:MakeWindow({
+    Title = "Fenix Hub V0.1",
+    SubTitle = "By Dark_330",
+    SaveFolder = "Flings"
+})
+
+-- Som ao executar (novo som)
+local sound = Instance.new("Sound")
+sound.SoundId = "rbxassetid://8486683243" -- Novo som de execução
+sound.Volume = 1
+sound.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+sound:Play()
+
+---------------------------------------------------------
+-- Aba Bem-Vindo
+---------------------------------------------------------
+local WelcomeTab = Window:MakeTab({
+    Name = "Bem-Vindo",
+    Icon = "star"
+})
+
+WelcomeTab:AddButton({
+    Name = "Bem-Vindo No Fenix Hub",
+    Callback = function()
+        print("Bem-Vindo No Fenix Hub, esta é a primeira versão do nosso hub, não espere por outras versões.")
+    end
+})
+
+---------------------------------------------------------
+-- Aba Trolls
+---------------------------------------------------------
+local Tab1 = Window:MakeTab({
+    Name = "Trolls",
+    Icon = "cherry"
+})
+
+---------------------------------------------------------
+-- Variáveis
+---------------------------------------------------------
+local FlingON = false
+local AntiSitON = false
+local bavObj = nil
+local normalSpeed = 2000
+local chaseSpeed = normalSpeed
+local accelerating = false
+local backOffset = Vector3.new(0,0,5)
+local selectedPlayer = nil
+local viewToggle = false
+local originalCameraSubject = nil
+local playerConnections = {}
+
+local RunService = game:GetService("RunService")
+
+---------------------------------------------------------
+-- Funções auxiliares
+---------------------------------------------------------
+local function getPlayers()
+    local list = {}
+    for _, plr in ipairs(game.Players:GetPlayers()) do
+        table.insert(list, plr.Name)
+    end
+    return list
+end
+
+local function spinTool(character)
+    local tool = character:FindFirstChildOfClass("Tool")
+    if tool then
+        local handle = tool:FindFirstChild("Handle")
+        if handle then
+            local bav = handle:FindFirstChild("ToolSpin")
+            if not bav then
+                bav = Instance.new("BodyAngularVelocity")
+                bav.Name = "ToolSpin"
+                bav.MaxTorque = Vector3.new(1e20,1e20,1e20)
+                bav.AngularVelocity = Vector3.new(1000,1000,1000)
+                bav.Parent = handle
+            else
+                bav.AngularVelocity = Vector3.new(1000,1000,1000)
+            end
+        end
+    end
+end
+
+local function createBAV(hrp)
+    local bav = Instance.new("BodyAngularVelocity")
+    bav.MaxTorque = Vector3.new(1e20,1e20,1e20)
+    bav.AngularVelocity = Vector3.new(300,300,300)
+    bav.Parent = hrp
+    return bav
+end
+
+local function createInfiniteTrip(hrp)
+    local trip = hrp:FindFirstChild("TripPerm")
+    if not trip then
+        trip = Instance.new("BodyPosition")
+        trip.Name = "TripPerm"
+        trip.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+        trip.P = 1e5
+        trip.D = 1e4
+        trip.Position = hrp.Position
+        trip.Parent = hrp
+    else
+        trip.Position = hrp.Position
+    end
+end
+
+local function equipAllTools()
+    local lp = game.Players.LocalPlayer
+    if lp.Character then
+        for _, tool in ipairs(lp.Backpack:GetChildren()) do
+            if tool:IsA("Tool") then
+                tool.Parent = lp.Character
+            end
+        end
+    end
+end
+
+local function removeTrip(hrp)
+    local trip = hrp:FindFirstChild("TripPerm")
+    if trip then trip:Destroy() end
+end
+
+local function flyForward(duration, speed)
+    local lp = game.Players.LocalPlayer
+    local char = lp.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(1e9,1e9,1e9)
+    bv.Velocity = hrp.CFrame.LookVector * speed
+    bv.Parent = hrp
+
+    task.wait(duration)
+    bv:Destroy()
+end
+
+---------------------------------------------------------
+-- Botão Pegar Sofá
+---------------------------------------------------------
+Tab1:AddButton({
+    Name = "Pegar Sofá",
+    Callback = function()
+        local lp = game.Players.LocalPlayer
+        local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.CFrame = CFrame.new(-82.32, 18.77, -130.78)
+        end
+    end
+})
+
+---------------------------------------------------------
+-- Dropdown Players + Conexão de Reset + View
+---------------------------------------------------------
+local playerDropdown
+local function updateViewCamera()
+    if viewToggle and selectedPlayer then
+        local target = game.Players:FindFirstChild(selectedPlayer)
+        if target and target.Character then
+            local targetHumanoid = target.Character:FindFirstChildOfClass("Humanoid")
+            if targetHumanoid then
+                workspace.CurrentCamera.CameraSubject = targetHumanoid
+                workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+            end
+        end
+    end
+end
+
+local function connectResetNotificationAndTP(player)
+    if playerConnections[player] then
+        playerConnections[player]:Disconnect()
+        playerConnections[player] = nil
+    end
+
+    local function onRespawn(char)
+        if selectedPlayer ~= player.Name then return end
+        local thrp = char:WaitForChild("HumanoidRootPart")
+        local lp = game.Players.LocalPlayer
+        local hum = char:WaitForChild("Humanoid")
+        if not thrp or not hum then return end
+
+        -- TP automático + Equip tools
+        for i = 1, 5 do
+            if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                lp.Character.HumanoidRootPart.CFrame = thrp.CFrame + Vector3.new(0,3,0)
+            end
+            task.wait(0.05)
+        end
+
+        equipAllTools()
+        createInfiniteTrip(lp.Character:FindFirstChild("HumanoidRootPart"))
+        updateViewCamera()
+
+        -- Fling continua ativo mesmo após morte
+        FlingON = true
+    end
+
+    local conn = player.CharacterAdded:Connect(onRespawn)
+    playerConnections[player] = conn
+end
+
+playerDropdown = Tab1:AddDropdown({
+    Name = "Players",
+    Description = "Selecione o alvo",
+    Options = getPlayers(),
+    Callback = function(v)
+        selectedPlayer = v
+        updateViewCamera()
+        local target = game.Players:FindFirstChild(selectedPlayer)
+        if target then
+            connectResetNotificationAndTP(target)
+        end
+    end
+})
+
+-- Atualiza automaticamente a lista de players
+task.spawn(function()
+    while true do
+        task.wait(5)
+        local options = getPlayers()
+        if playerDropdown then
+            playerDropdown:Refresh(options)
+        end
+        for _, playerName in ipairs(options) do
+            local target = game.Players:FindFirstChild(playerName)
+            if target then
+                connectResetNotificationAndTP(target)
+            end
+        end
+        updateViewCamera()
+    end
+end)
+
+---------------------------------------------------------
+-- Botão TP manual
+---------------------------------------------------------
+Tab1:AddButton({
+    Name = "TP para Player",
+    Callback = function()
+        local lp = game.Players.LocalPlayer
+        local target = selectedPlayer and game.Players:FindFirstChild(selectedPlayer)
+        if target and target.Character and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+            local thrp = target.Character:FindFirstChild("HumanoidRootPart")
+            lp.Character.HumanoidRootPart.CFrame = thrp.CFrame + Vector3.new(0,3,0)
+        end
+    end
+})
+
+---------------------------------------------------------
+-- Toggle View Player
+---------------------------------------------------------
+Tab1:AddToggle({
+    Name = "View Player",
+    Default = false,
+    Callback = function(v)
+        viewToggle = v
+        local cam = workspace.CurrentCamera
+        if v then
+            originalCameraSubject = cam.CameraSubject
+            updateViewCamera()
+        else
+            if originalCameraSubject then
+                cam.CameraSubject = originalCameraSubject
+                cam.CameraType = Enum.CameraType.Custom
+            else
+                local lp = game.Players.LocalPlayer
+                if lp.Character then
+                    cam.CameraSubject = lp.Character:FindFirstChildOfClass("Humanoid") or lp.Character:FindFirstChild("HumanoidRootPart")
+                    cam.CameraType = Enum.CameraType.Custom
+                end
+            end
+        end
+    end
+})
+
+---------------------------------------------------------
+-- Toggle FLING
+---------------------------------------------------------
+Tab1:AddToggle({
+    Name = "Fling (OP) – Spin Corpo + Tool Spin + Perseguir + Trip",
+    Default = false,
+    Callback = function(v)
+        FlingON = v
+        local lp = game.Players.LocalPlayer
+        if v and lp.Character then
+            equipAllTools()
+
+            -- TP automático no player selecionado ao ativar
+            if selectedPlayer then
+                local target = game.Players:FindFirstChild(selectedPlayer)
+                if target and target.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                    local thrp = target.Character:FindFirstChild("HumanoidRootPart")
+                    lp.Character.HumanoidRootPart.CFrame = thrp.CFrame + Vector3.new(0,3,0)
+                end
+            end
+
+        elseif not v and lp.Character then
+            accelerating = false
+            chaseSpeed = normalSpeed
+            local hrp = lp.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then removeTrip(hrp) end
+            if bavObj then bavObj:Destroy() bavObj = nil end
+            for _, tool in ipairs(lp.Character:GetChildren()) do
+                if tool:IsA("Tool") and tool:FindFirstChild("ToolSpin") then
+                    tool.ToolSpin:Destroy()
+                end
+            end
+        end
+    end
+})
+
+---------------------------------------------------------
+-- Toggle ANTI-SIT
+---------------------------------------------------------
+Tab1:AddToggle({
+    Name = "Anti-Sit Instant",
+    Default = false,
+    Callback = function(v) AntiSitON = v end
+})
+
+---------------------------------------------------------
+-- Notificação quando player selecionado sair
+---------------------------------------------------------
+game.Players.PlayerRemoving:Connect(function(player)
+    if player.Name == selectedPlayer then
+        -- Toca o som de aviso
+        local leaveSound = Instance.new("Sound")
+        leaveSound.SoundId = "rbxassetid://8551372796" -- Som de player saiu
+        leaveSound.Volume = 1
+        leaveSound.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+        leaveSound:Play()
+
+        -- Mostra notificação
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "Aviso",
+            Text = player.Name.." Saiu!",
+            Duration = 3
+        })
+        selectedPlayer = nil
+    end
+end)
+
+---------------------------------------------------------
+-- Loop Heartbeat
+---------------------------------------------------------
+RunService.Heartbeat:Connect(function(dt)
+    local lp = game.Players.LocalPlayer
+    local char = lp.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp then return end
+
+    if AntiSitON and hum and hum.Sit then
+        hum.Sit = false
+    end
+
+    if FlingON and selectedPlayer then
+        local target = game.Players:FindFirstChild(selectedPlayer)
+        if not target or not target.Character then return end
+        local thrp = target.Character:FindFirstChild("HumanoidRootPart")
+        local humanoid = target.Character:FindFirstChildOfClass("Humanoid")
+        if not thrp or not humanoid then return end
+
+        spinTool(char)
+        if not bavObj then
+            bavObj = createBAV(hrp)
+        else
+            bavObj.AngularVelocity = Vector3.new(300,300,300)
+        end
+
+        createInfiniteTrip(hrp)
+
+        -- Fly infinito apenas se player estiver sentado
+        if humanoid.Sit then
+            FlingON = false
+            chaseSpeed = normalSpeed
+            accelerating = false
+
+            -- Fly para frente por 3 segundos com velocidade absurda
+            flyForward(3, 9e100)
+
+            -- Soltar todas as tools durante o Fly
+            for _, tool in ipairs(char:GetChildren()) do
+                if tool:IsA("Tool") then
+                    task.delay(0.25, function()
+                        if tool.Parent == char then
+                            tool.Parent = lp.Backpack
+                        end
+                    end)
+                end
+            end
+
+            -- Move para a última coordenada
+            hrp.CFrame = CFrame.new(233058544.00, 139438368.00, 164889344.00)
+            hrp.AssemblyLinearVelocity = Vector3.new(0, -1e8,0)
+            hrp.CanCollide = false
+
+            return
+        end
+
+        -- Perseguir normalmente se não estiver sentado
+        local targetPos = thrp.Position - backOffset
+        local direction = (targetPos - hrp.Position).Unit
+        hrp.CFrame = CFrame.new(hrp.Position + direction*chaseSpeed*dt)
+
+        for _, p in ipairs(char:GetChildren()) do
+            if p:IsA("BasePart") then p.CanCollide = false end
+        end
+
+        hrp.AssemblyLinearVelocity = Vector3.zero
+    else
+        if hrp:FindFirstChild("TripPerm") then
+            hrp.TripPerm:Destroy()
+        end
+        if bavObj then
+            bavObj:Destroy()
+            bavObj = nil
+        end
+        accelerating = false
+        chaseSpeed = normalSpeed
+    end
+end)
